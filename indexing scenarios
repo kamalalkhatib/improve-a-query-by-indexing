@@ -7,23 +7,23 @@ We need to try different indexing scenarios to figure out which are best columns
 Because we need to retrieve data based on date, so it‘s clear that we need to index inv_date column in invoice_main.
 create index inv_mas_date_idx on invice_master(trunc(inv_date));
  We created function based index because we use trunc function in the query. If we create normal index and we use function in where clause, the index will not be used.
--	After executing the following query:
--	  1  select trunc(inv_date),item_id,sum(item_qty) from inv_det_heap d
--	  2      join inv_mas_heap m
--	  3      on d.inv_id=m.inv_id
--	  4      and
--	  5      (trunc(inv_date)=trunc(to_date('jan-01-20','mon-dd-yy'))
--	  6     )
--	  8   group by trunc(inv_date),item_id
+After executing the following query:
+ 1  select trunc(inv_date),item_id,sum(item_qty) from inv_det_heap d
+2      join inv_mas_heap m
+3      on d.inv_id=m.inv_id
+ 4      and
+ 5      (trunc(inv_date)=trunc(to_date('jan-01-20','mon-dd-yy'))
+6     )
+8   group by trunc(inv_date),item_id
 The Execution Plan shows the following details:
--	| Id  | Operation                             | Name             | Rows  | Bytes
--	 | Cost (%CPU)| Time     |                               
--	------------------------------------------------------------------------ 
--	|   0 | SELECT STATEMENT                      |                  |     4 |   144
--	 |  3048   (2)| 00:00:01 |                                                                                                                                      
--	|   1 |  HASH GROUP BY                        |                  |     4 |   144
--	 |  3048   (2)| 00:00:01 |                                 
--	|*  2 |   HASH JOIN                           |                  |   919 | 33084
+| Id  | Operation                             | Name             | Rows  | Bytes
+ | Cost (%CPU)| Time     |                               
+------------------------------------------------------------------------ 
+  0 | SELECT STATEMENT                      |                  |     4 |   144
+ |  3048   (2)| 00:00:01 |                                                                                                                                      
+|   1 |  HASH GROUP BY                        |                  |     4 |   144
+ |  3048   (2)| 00:00:01 |                                 
+|*  2 |   HASH JOIN                           |                  |   919 | 33084
 -	 |  3047   (2)| 00:00:01 |                                 
 -	|   3 |    TABLE ACCESS BY INDEX ROWID BATCHED| INV_MAS_HEAP     |    55 |  1375
 -	 |     3   (0)| 00:00:01 |                                     
