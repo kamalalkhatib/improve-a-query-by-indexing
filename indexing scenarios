@@ -1,11 +1,12 @@
 Analyzing indexes for a specific query:
--	One of the main requirements for the car parts warehouse project was retrieving sum of sold quantities for each item for all branches together for a specific day.
--	We have two tables contain all sales:
--	Invoice_master: inv_id(pk),inv_date,store_id,cust_id,notes
--	Invoice_detail:inv_id(fk),item_id,item_qty,item_price.
--	We need to try different indexing scenarios to figure out which are best columns to index to achieve best performance.
--	Because we need to retrieve data based on date, so it‘s clear that we need to index inv_date column in invoice_main.
--	create index inv_mas_date_idx on invice_master(trunc(inv_date)); We created function based index because we use trunc function in the query. If we create normal index and we use function in where clause, the index will not be used.
+One of the main requirements for the car parts warehouse project was retrieving sum of sold quantities for each item for all branches together for a specific day.
+We have two tables contain all sales:
+Invoice_master: inv_id(pk),inv_date,store_id,cust_id,notes
+Invoice_detail:inv_id(fk),item_id,item_qty,item_price.
+We need to try different indexing scenarios to figure out which are best columns to index to achieve best performance.
+Because we need to retrieve data based on date, so it‘s clear that we need to index inv_date column in invoice_main.
+create index inv_mas_date_idx on invice_master(trunc(inv_date));
+ We created function based index because we use trunc function in the query. If we create normal index and we use function in where clause, the index will not be used.
 -	After executing the following query:
 -	  1  select trunc(inv_date),item_id,sum(item_qty) from inv_det_heap d
 -	  2      join inv_mas_heap m
