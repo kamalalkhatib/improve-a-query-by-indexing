@@ -46,7 +46,12 @@ The Execution Plan shows the following details:
 -	          0  sorts (memory)                                                     
 -	          0  sorts (disk)                                                       
 -	          4  rows processed                                                     
--	This execution plan shows FTS of invoice_detail, which is not efficient because we need to retrieve a few rows from this table, so why we need to scan the entire table. To change that, we could try indexing columns are used in the join of tables, which could let the optimizer to use the index on the FK column to retrieve the required rows from the invoice_detail table based on the retrieved rows from the invoice_master.
+This execution plan shows FTS of invoice_detail, 
+which is not efficient because we need to retrieve a few rows 
+from this table, so why we need to scan the entire table. 
+To change that, we could try indexing the columns are used in the join of tables, 
+which could let the optimizer to use the index on the FK column to retrieve the required 
+rows from the invoice_detail table based on the retrieved rows from the invoice_master.
 -	After creating the following index:
   create index inv_det_invid_idx on invoice_detail(inv_id);
 -	 Lets see the execution plan after that:
@@ -85,9 +90,14 @@ Statistics
           0  sorts (memory)                                                     
           0  sorts (disk)                                                       
          10  rows processed                                                     
-This change shows using the created index and avoids FTS of the invoive_detail, and we could notice how logical readings dropped from 
+This change shows that the optimizer used the created index and avoid FTS 
+of the invoive_detail, and we could notice how logical readings dropped from 
       10670  consistent gets    to                 2139  consistent gets .
-This is good improvement in performance, but if we check the execution plan, we could see that we still need to go to invoice_detail table to get item_id and item_qty, but if we add those columns to the index, we could get all the required data from this index and avoid going to invoice_detail table, let’s try creating the following index:
+This is good improvement in performance, but if we check the execution plan, 
+we could see that we still need to go to invoice_detail table to get item_id and item_qty, 
+but if we add those columns to the index, we could get all the required data 
+from this index and avoid going to invoice_detail table,
+ let’s try creating the following index:
 create index inv_det_invid_idx on invoice_details(inv_id,item_id,item_qty);                                                                           
 and lest check the execution plan:
 Execution Plan 
@@ -111,8 +121,12 @@ Statistics
 ----------------------------------------------------------                      
 170  consistent gets                                                    
  10  rows processed                                     
-This change shows big improvement in performance, the consistent gets                                                    dropped from 2139  consistent gets to 170  consistent gets because we did not need to go to invoice_detail to get data.
-At the end, when we create composite index, we need to pay attention to the position of columns in the index, because that could cause not using the index. For ex, if we change the index to the following:
+This change shows big improvement in performance, 
+the consistent dropped from  2139 yo 170 because we did not need 
+to go to invoice_detail to get data.
+At the end, when we create a composite index, we need to pay attention 
+to the position of columns in the index, because that could cause not using the index. 
+For ex, if we change the index to the following:
 create index inv_det_heap_inv_idx on inv_det_heap(item_id,item_qty,inv_id);
 and check the execution plan:
 Execution Plan
