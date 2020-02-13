@@ -1,4 +1,3 @@
-
 Analyzing indexes for a specific query:
 -	One of the main requirements for the car parts warehouse project was retrieving sum of sold quantities for each item for all branches together for a specific day.
 -	We have two tables contain all sales:
