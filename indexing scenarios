@@ -1,0 +1,138 @@
+
+Analyzing indexes for a specific query:
+-	One of the main requirements for the car parts warehouse project was retrieving sum of sold quantities for each item for all branches together for a specific day.
+-	We have two tables contain all sales:
+-	Invoice_master: inv_id(pk),inv_date,store_id,cust_id,notes
+-	Invoice_detail:inv_id(fk),item_id,item_qty,item_price.
+-	We need to try different indexing scenarios to figure out which are best columns to index to achieve best performance.
+-	Because we need to retrieve data based on date, so it‘s clear that we need to index inv_date column in invoice_main.
+-	create index inv_mas_date_idx on invice_master(trunc(inv_date)); We created function based index because we use trunc function in the query. If we create normal index and we use function in where clause, the index will not be used.
+-	After executing the following query:
+-	  1  select trunc(inv_date),item_id,sum(item_qty) from inv_det_heap d
+-	  2      join inv_mas_heap m
+-	  3      on d.inv_id=m.inv_id
+-	  4      and
+-	  5      (trunc(inv_date)=trunc(to_date('jan-01-20','mon-dd-yy'))
+-	  6     )
+-	  8   group by trunc(inv_date),item_id
+The Execution Plan shows the following details:
+-	| Id  | Operation                             | Name             | Rows  | Bytes
+-	 | Cost (%CPU)| Time     |                               
+-	------------------------------------------------------------------------ 
+-	|   0 | SELECT STATEMENT                      |                  |     4 |   144
+-	 |  3048   (2)| 00:00:01 |                                                                                                                                      
+-	|   1 |  HASH GROUP BY                        |                  |     4 |   144
+-	 |  3048   (2)| 00:00:01 |                                 
+-	|*  2 |   HASH JOIN                           |                  |   919 | 33084
+-	 |  3047   (2)| 00:00:01 |                                 
+-	|   3 |    TABLE ACCESS BY INDEX ROWID BATCHED| INV_MAS_HEAP     |    55 |  1375
+-	 |     3   (0)| 00:00:01 |                                     
+-	|*  4 |     INDEX RANGE SCAN                  | INV_MAS_DATE_IDX |   100 |      
+-	 |     1   (0)| 00:00:01 |                                                                                                                                      
+-	|   5 |    TABLE ACCESS FULL                  | INV_DET_HEAP     |  4000K|    41
+-	M|  3034   (1)| 00:00:01 |                                                      
+-	Statistics
+-	----------------------------------------------------------                      
+-	          0  recursive calls                                                    
+-	          0  db block gets                                                      
+-	      10670  consistent gets                                                    
+-	          0  physical reads                                                     
+-	          0  redo size                                                          
+-	        785  bytes sent via SQL*Net to client                                   
+-	        551  bytes received via SQL*Net from client                             
+-	          2  SQL*Net roundtrips to/from client                                  
+-	          0  sorts (memory)                                                     
+-	          0  sorts (disk)                                                       
+-	          4  rows processed                                                     
+-	This execution plan shows FTS of invoice_detail, which is not efficient because we need to retrieve a few rows from this table, so why we need to scan the entire table. To change that, we could try indexing columns are used in the join of tables, which could let the optimizer to use the index on the FK column to retrieve the required rows from the invoice_detail table based on the retrieved rows from the invoice_master.
+-	After creating the following index:
+  create index inv_det_invid_idx on invoice_detail(inv_id);
+-	 Lets see the execution plan after that:
+  
+ Id  | Operation                               | Name                 | Rows  |
+ Bytes | Cost (%CPU)| Time     |                                                
+  -------------------------------                                                
+ |   0 | SELECT STATEMENT                        |                      |    10 |
+   320 |  1205   (1)| 00:00:01 |                                                
+ |   1 |  HASH GROUP BY                          |                      |    10 |
+   320 |  1205   (1)| 00:00:01 |                                                
+ |*  2 |   FILTER                                |                      |       |
+       |            |          |                                                
+ |   3 |    NESTED LOOPS                         |                      |  9117 |
+   284K|  1204   (0)| 00:00:01 |                                                
+ |   4 |     NESTED LOOPS                        |                      |  9117 |
+   284K|  1204   (0)| 00:00:01 |                                                
+ |   5 |      TABLE ACCESS BY INDEX ROWID BATCHED| INV_MAS_HEAP         |   960 |
+ 20160 |     4   (0)| 00:00:01 |                                                
+ |*  6 |       INDEX RANGE SCAN                  | INV_MAS_DATE_IDX     |   994 |
+       |     1   (0)| 00:00:01 |                                                
+ |*  7 |      INDEX RANGE SCAN                   | INV_DET_HEAP_INV_IDX |     4 |
+       |     1   (0)| 00:00:01 |      
+|   8 |     TABLE ACCESS BY INDEX ROWID         | INV_DET_HEAP         |    10 |
+   110 |     1   (0)| 00:00:01 |  
+Statistics
+----------------------------------------------------------                      
+          0  recursive calls                                                    
+          0  db block gets                                                      
+       2139  consistent gets                                                    
+          0  physical reads                                                     
+          0  redo size                                                          
+        839  bytes sent via SQL*Net to client                                   
+        551  bytes received via SQL*Net from client                             
+          2  SQL*Net roundtrips to/from client                                  
+          0  sorts (memory)                                                     
+          0  sorts (disk)                                                       
+         10  rows processed                                                     
+This change shows using the created index and avoids FTS of the invoive_detail, and we could notice how logical readings dropped from 
+      10670  consistent gets    to                 2139  consistent gets .
+This is good improvement in performance, but if we check the execution plan, we could see that we still need to go to invoice_detail table to get item_id and item_qty, but if we add those columns to the index, we could get all the required data from this index and avoid going to invoice_detail table, let’s try creating the following index:
+create index inv_det_invid_idx on invoice_details(inv_id,item_id,item_qty);                                                                           
+and lest check the execution plan:
+Execution Plan 
+| Id  | Operation                             | Name                 | Rows  | B
+ytes | Cost (%CPU)| Time     |                                                  
+                          --------    
+|   0 | SELECT STATEMENT                      |                      |    10 |  
+ 330 |   484   (1)| 00:00:01 |    
+|   1 |  HASH GROUP BY                        |                      |    10 |  
+ 330 |   484   (1)| 00:00:01 | 
+|   2 |   NESTED LOOPS                        |                      |  9117 |  
+ 293K|   483   (0)| 00:00:01 
+|   3 |    TABLE ACCESS BY INDEX ROWID BATCHED| INV_MAS_HEAP         |   960 | 2
+1120 |     3   (0)| 00:00:01 |    
+|*  4 |     INDEX RANGE SCAN                  | INV_MAS_DATE_IDX     |  1000 |  
+     |     2   (0)| 00:00:01 |         
+|*  5 |    INDEX RANGE SCAN                   | INV_DET_HEAP_INV_IDX |    10 |  
+ 110 |     1   (0)| 00:00:01 |     
+                                    
+Statistics
+----------------------------------------------------------                      
+170  consistent gets                                                    
+ 10  rows processed                                     
+This change shows big improvement in performance, the consistent gets                                                    dropped from 2139  consistent gets to 170  consistent gets because we did not need to go to invoice_detail to get data.
+At the end, when we create composite index, we need to pay attention to the position of columns in the index, because that could cause not using the index. For ex, if we change the index to the following:
+create index inv_det_heap_inv_idx on inv_det_heap(item_id,item_qty,inv_id);
+and check the execution plan:
+Execution Plan
+-------------------                                                     
+| Id  | Operation                             | Name             | Rows  | Bytes
+ | Cost (%CPU)| Time     |                                                      
+--------------------------------------------------------------------------------
+|   0 | SELECT STATEMENT                      |                  |    10 |   330
+ |  3049   (2)| 00:00:01 |                                                      
+|   1 |  HASH GROUP BY                        |                  |    10 |   330
+ |  3049   (2)| 00:00:01 |                                                      
+|*  2 |   HASH JOIN                           |                  |  9117 |   293
+K|  3047   (2)| 00:00:01 |                                                      
+|   3 |    TABLE ACCESS BY INDEX ROWID BATCHED| INV_MAS_HEAP     |   960 | 21120
+ |     3   (0)| 00:00:01 |                                                      
+|*  4 |     INDEX RANGE SCAN                  | INV_MAS_DATE_IDX |  1000 |      
+ |     1   (0)| 00:00:01 |                                                      
+|   5 |    TABLE ACCESS FULL                  | INV_DET_HEAP     |  4000K|    41
+M|  3034   (1)| 00:00:01 |                                                      
+Statistics
+----------------------------------------------------------                      
+      10672  consistent gets                                                    
+          0  physical reads                                                     
+         10  rows processed                                     
+This shows the optimizer did not use the index because we did not put inv_id at the beginning.                             
